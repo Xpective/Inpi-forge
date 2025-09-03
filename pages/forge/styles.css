@@ -1,0 +1,13 @@
+:root { --bg:#0a0b10; --card:#111525; --fg:#e7e9f3; --muted:#9aa3b2; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui;}
+header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1d2237;}
+h1{margin:0;font-size:20px}
+button{background:#2a56ff;color:#fff;border:0; padding:10px 14px;border-radius:8px;cursor:pointer}
+button[disabled]{opacity:.5;cursor:not-allowed}
+.card{background:var(--card);margin:16px; padding:16px;border-radius:12px;border:1px solid #1c2240}
+.hidden{display:none}
+.row{display:flex;gap:16px;margin:10px 0}
+.muted{color:var(--muted);margin:8px 0}
+#items li{margin:6px 0}
+label select{margin-left:8px}
