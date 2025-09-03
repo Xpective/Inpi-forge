@@ -1,0 +1,23 @@
+name = "inpinity-forge-api"
+main = "src/index.ts"
+compatibility_date = "2025-08-20"
+
+# KV Bindings
+[[kv_namespaces]]
+binding = "KV_FORGE"
+id = "KVID_PROD"    # nach create einsetzen
+preview_id = "KVID_DEV"
+
+# Optional: R2 (später)
+# [[r2_buckets]]
+# binding = "R2_BUCKET"
+# bucket_name = "inpi-forge"
+
+[vars]
+PUBLIC_RPC_URL = "https://api.mainnet-beta.solana.com"
+INPI_MINT = "GBfEVjkSn3KSmRnqe83Kb8c42DsxkJmiDCb4AbNYBYt1"
+USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+CREATOR_PUBKEY = "GEFoNLncuhh4nH99GKvVEUxe59SGe74dbLG7UUtfHrCp"
+
+# Empfänger (Owner der Ziel-Tokenkonten)
+TREASURY_WALLET = "REPLACE_WITH_TREASURY_OWNER"  # <-- dein Wallet (Owner)
