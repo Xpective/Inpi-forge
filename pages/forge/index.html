@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inpinity Forge</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Inpinity Forge</h1>
+    <button id="connectBtn">Phantom verbinden</button>
+    <span id="wallet"></span>
+  </header>
+
+  <main>
+    <section id="gate" class="card hidden">
+      <h2>Zugang</h2>
+      <div id="gateMsg">Prüfe Pi-Pyramide-Pass…</div>
+    </section>
+
+    <section id="forge" class="card hidden">
+      <h2>Forge</h2>
+      <label>Item-Klasse:
+        <select id="classId">
+          <option value="sword.v2">Sword.v2</option>
+          <option value="amulet.v1">Amulet.v1</option>
+          <option value="relic.v1">Relic.v1</option>
+        </select>
+      </label>
+
+      <div class="row">
+        <label><input type="radio" name="cur" value="INPI" checked /> INPI</label>
+        <label><input type="radio" name="cur" value="USDC" /> USDC</label>
+      </div>
+
+      <button id="quoteBtn">Preis anzeigen</button>
+      <div id="quote" class="muted"></div>
+
+      <button id="commitBtn" disabled>Commit</button>
+      <div id="pay" class="muted"></div>
+
+      <button id="revealBtn" disabled>Reveal</button>
+      <div id="result"></div>
+    </section>
+
+    <section id="inventory" class="card hidden">
+      <h2>Meine Items</h2>
+      <ul id="items"></ul>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
