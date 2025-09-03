@@ -1,0 +1,9 @@
+Key,NiagaraSystemPath
+fire_common,/Game/FX/NS_Fire_Common.NS_Fire_Common
+fire_rare,/Game/FX/NS_Fire_Rare.NS_Fire_Rare
+fire_epic,/Game/FX/NS_Fire_Epic.NS_Fire_Epic
+fire_legendary,/Game/FX/NS_Fire_Legendary.NS_Fire_Legendary
+lightning_common,/Game/FX/NS_Lightning_Common.NS_Lightning_Common
+lightning_rare,/Game/FX/NS_Lightning_Rare.NS_Lightning_Rare
+lightning_epic,/Game/FX/NS_Lightning_Epic.NS_Lightning_Epic
+lightning_legendary,/Game/FX/NS_Lightning_Legendary.NS_Lightning_Legendary
