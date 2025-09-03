@@ -1,0 +1,8 @@
+Element,EmissiveParam,NormalParam,RoughnessParam
+fire,EmissiveStrength,NormalScale,Roughness
+lightning,EmissiveStrength,NormalScale,Roughness
+water,EmissiveStrength,NormalScale,Roughness
+ice,EmissiveStrength,NormalScale,Roughness
+earth,EmissiveStrength,NormalScale,Roughness
+wind,EmissiveStrength,NormalScale,Roughness
+void,EmissiveStrength,NormalScale,Roughness
