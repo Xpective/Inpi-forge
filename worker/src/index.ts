@@ -10,6 +10,7 @@ type Env = {
   CREATOR_PUBKEY: string;
   TREASURY_WALLET: string;
   ADMIN_TOKEN?: string;
+  PI_COLLECTION_MINT: string;
 };
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
@@ -51,10 +52,10 @@ async function ensureDefaults(env:Env){
     "legend_cap_weekly":"144",
     "legend_prob_cap_bps":"800",
     "presale_days_left":"60",
-    "presale_price_inpi":"100",    // Beispiel
-    "presale_price_usdc":"5",      // Beispiel
+    "presale_price_inpi":"100",
+    "presale_price_usdc":"5",
     "public_price_usdc":"7",
-    "public_price_inpi_discount_bps":"1000" // 10%
+    "public_price_inpi_discount_bps":"1000"
   };
   for(const [k,v] of Object.entries(defaults)){
     const exists = await env.KV_FORGE.get(`cfg:${k}`);
@@ -93,29 +94,200 @@ async function requireSession(req:Request, env:Env){
   return JSON.parse(sessRaw);
 }
 
-/** ======== Gate (P2+: echter Check folgt) ======== */
-async function routeGate(env:Env, sess:any){
-  // TODO (P2+): Echten Pi-Pyramide NFT Besitz via RPC/Indexer verifizieren.
-  return ok({ hasPass: true, piOrigin: { row:7, digit_pi:3, digit_phi:1, rarity_score:9, tier:"Legendary", is_axis:true } });
-}
-
-/** ======== Payment Verify (P2) ======== */
+/** ======== RPC Helpers ======== */
 async function fetchJson(url: string, init?: RequestInit) {
   const r = await fetch(url, init);
   if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
   return await r.json();
 }
-async function rpcCall(rpc:string, body:any){
-  return fetchJson(rpc, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
+async function rpcCall(env:Env, body:any){
+  return fetchJson(env.PUBLIC_RPC_URL, { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) });
 }
-async function getSigsForAddress(rpc: string, reference: string, limit = 20) {
+
+/** getParsedTokenAccountsByOwner (SPL Token & Token-2022) */
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022    = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+/** Metaplex Token Metadata Program (mainnet) */
+const TMETA_PROGRAM = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
+
+/** Hole NFT-ähnliche Token Accounts (decimals==0, amount>0) */
+async function getOwnedNftLikeMints(env:Env, owner:string): Promise<string[]> {
+  const req = (programId:string)=> rpcCall(env, {
+    jsonrpc:"2.0", id:1, method:"getParsedTokenAccountsByOwner",
+    params:[ owner, { programId }, { commitment:"confirmed" } ]
+  });
+  const [a,b] = await Promise.allSettled([req(TOKEN_PROGRAM), req(TOKEN_2022)]);
+  const accs:any[] = [];
+  const push = (res:any)=> { if(res?.result?.value) accs.push(...res.result.value); };
+
+  if (a.status==="fulfilled") push(a.value);
+  if (b.status==="fulfilled") push(b.value);
+
+  const mints = new Set<string>();
+  for (const it of accs) {
+    try {
+      const info = it.account.data.parsed.info;
+      const amt = Number(info.tokenAmount.uiAmount || 0);
+      const dec = Number(info.tokenAmount.decimals || 0);
+      const mint = info.mint;
+      if (amt > 0 && dec === 0 && typeof mint === "string") mints.add(mint);
+    } catch {}
+  }
+  return [...mints];
+}
+
+/** getProgramAccounts: Metaplex Metadata via memcmp auf Mint @offset 33 */
+async function getMetadataAccountByMint(env:Env, mint:string){
+  const body = {
+    jsonrpc:"2.0", id:1, method:"getProgramAccounts",
+    params:[
+      TMETA_PROGRAM,
+      {
+        encoding:"base64",
+        filters:[
+          { memcmp: { offset: 33, bytes: mint } }
+        ]
+      }
+    ]
+  };
+  const r = await rpcCall(env, body);
+  const arr = r.result || [];
+  return arr[0] || null; // erster Treffer
+}
+
+/** Minimal-Decoder für Metaplex Metadata: liest uri + collection */
+function decodeMetadataUriAndCollection(b64data:string){
+  const raw = Uint8Array.from(atob(b64data), c => c.charCodeAt(0));
+  let o = 0;
+  const readU8 = ()=> raw[o++];
+  const readU16 = ()=> { const v = raw[o] | (raw[o+1]<<8); o+=2; return v; };
+  const readU32 = ()=> { const v = raw[o] | (raw[o+1]<<8) | (raw[o+2]<<16) | (raw[o+3]<<24); o+=4; return v>>>0; };
+  const readBytes = (n:number)=> { const v = raw.slice(o, o+n); o+=n; return v; };
+  const readStr = ()=> { const n=readU32(); const v = readBytes(n); return new TextDecoder().decode(v).replace(/\0+$/,""); };
+
+  try{
+    /* key(1), updateAuth(32), mint(32) */
+    readU8(); o += 32; o += 32;
+
+    /* name, symbol, uri */
+    const name   = readStr();
+    const symbol = readStr();
+    const uri    = readStr();
+
+    /* sellerFeeBps */
+    readU16();
+
+    /* creators: option u8 */
+    const hasCreators = readU8();
+    if (hasCreators===1){
+      const len = readU32();
+      for (let i=0;i<len;i++){
+        o += 32; /* address */
+        o += 1;  /* verified */
+        o += 1;  /* share */
+      }
+    }
+
+    /* primarySaleHappened, isMutable */
+    readU8(); readU8();
+
+    /* editionNonce: option u8 */
+    const hasEd = readU8(); if (hasEd===1) readU8();
+
+    /* tokenStandard: option u8 */
+    const hasStd = readU8(); if (hasStd===1) readU8();
+
+    /* collection: option u8 -> {verified u8, key[32]} */
+    let collection: null | { verified:boolean, key:string } = null;
+    const hasColl = readU8();
+    if (hasColl===1){
+      const verified = readU8()===1;
+      const keyBytes = readBytes(32);
+      const key = bs58.encode(keyBytes);
+      collection = { verified, key };
+    }
+
+    return { uri, collection };
+  }catch(e){
+    return { uri:"", collection:null };
+  }
+}
+
+/** IPFS URI → HTTPS Gateway */
+function ipfsToHttp(u:string){
+  if (!u) return "";
+  if (u.startsWith("ipfs://")) return `https://ipfs.io/ipfs/${u.slice(7)}`;
+  return u;
+}
+
+/** Pi-Attribute aus Off-Chain JSON ziehen (best effort) */
+async function loadPiOriginFromUri(uri:string){
+  try{
+    const http = ipfsToHttp(uri);
+    if (!http) return null;
+    const json = await fetchJson(http);
+    const attrs = Array.isArray(json.attributes) ? json.attributes : [];
+    const get = (k:string)=> {
+      const f = attrs.find((a:any)=> (a.trait_type||a.traitType) === k);
+      return f ? (f.value ?? f.Value ?? null) : null;
+    };
+    const row         = Number(get("Row") ?? get("Pi Row") ?? 0);
+    const digit_pi    = Number(get("digit_pi") ?? get("Digit Pi") ?? 0);
+    const digit_phi   = Number(get("digit_phi") ?? get("Digit Phi") ?? 0);
+    const rarityScore = Number(get("rarity_score") ?? get("Pi Score") ?? 0);
+    const tier        = (get("tier") ?? get("Tier") ?? get("Rarity") ?? "").toString();
+    const is_axis     = (get("is_axis") ?? get("Is Axis") ?? "false").toString().toLowerCase()==="true";
+    return { row, digit_pi, digit_phi, rarity_score: rarityScore, tier, is_axis };
+  }catch{ return null; }
+}
+
+/** ======== Gate (ECHT) ======== */
+async function routeGate(env:Env, sess:any){
+  const owner = sess.pubkey as string;
+  // 1) alle NFT-artigen Mints besorgen
+  const mints = await getOwnedNftLikeMints(env, owner);
+  if (mints.length===0) return ok({ hasPass:false });
+
+  // 2) pro Mint: Metadata via getProgramAccounts(memcmp mint @33), dann collection prüfen
+  for (const mint of mints){
+    try{
+      const metaAcc = await getMetadataAccountByMint(env, mint);
+      if (!metaAcc?.account?.data?.[0]) continue;
+      const b64 = metaAcc.account.data[0];
+      const { uri, collection } = decodeMetadataUriAndCollection(b64);
+      if (!collection) continue;
+
+      const isOurCollection =
+        collection.verified === true &&
+        collection.key === env.PI_COLLECTION_MINT;
+
+      if (!isOurCollection) continue;
+
+      // 3) Pi-Attribute laden (optional, best effort)
+      const pi = await loadPiOriginFromUri(uri);
+
+      return ok({
+        hasPass: true,
+        mint,
+        collection: { key: collection.key, verified: collection.verified },
+        piOrigin: pi ?? { row: 33, digit_pi: 0, digit_phi: 0, rarity_score: 0, tier: "Common", is_axis: false }
+      });
+    }catch(e){}
+  }
+
+  return ok({ hasPass:false });
+}
+
+/** ======== Payment Verify (P2) ======== */
+async function getSigsForAddress(env:Env, reference: string, limit = 25) {
   const body = { jsonrpc:"2.0", id:1, method:"getSignaturesForAddress", params:[ reference, { limit } ] };
-  const r = await rpcCall(rpc, body);
+  const r = await rpcCall(env, body);
   return r.result as any[];
 }
-async function getTx(rpc:string, sig:string){
+async function getTx(env:Env, sig:string){
   const body = { jsonrpc:"2.0", id:1, method:"getTransaction", params:[ sig, { encoding:"jsonParsed", maxSupportedTransactionVersion:0 } ] };
-  const r = await rpcCall(rpc, body);
+  const r = await rpcCall(env, body);
   return r.result;
 }
 function matchSplTransferToTreasury(tx:any, treasury:string, mint:string, amountUi:number){
@@ -133,10 +305,9 @@ function matchSplTransferToTreasury(tx:any, treasury:string, mint:string, amount
   }catch{ return false; }
 }
 async function verifyPaymentByReference(env:Env, reference:string, mint:string, amount:number){
-  const rpc = env.PUBLIC_RPC_URL;
-  const sigs = await getSigsForAddress(rpc, reference, 25);
+  const sigs = await getSigsForAddress(env, reference, 25);
   for(const s of sigs){
-    const tx = await getTx(rpc, s.signature);
+    const tx = await getTx(env, s.signature);
     if(!tx) continue;
     const ok = matchSplTransferToTreasury(tx, env.TREASURY_WALLET, mint, amount);
     if(ok) return s.signature;
@@ -156,7 +327,7 @@ type Commit = {
   createdAt: number;
   price: number;
   presaleDaysLeft: number;
-  reference: string; // base58 pubkey
+  reference: string;
 };
 
 async function routeCommit(req:Request, env:Env, sess:any){
@@ -165,14 +336,12 @@ async function routeCommit(req:Request, env:Env, sess:any){
   const enable = await getKVBool(env,"enable_forge",true);
   if(!enable) return bad("forge disabled", 403);
 
-  // per-wallet limit
   const day = dayKey();
   const wkey = `count:${sess.pubkey}:${day}`;
   const cur = Number(await env.KV_FORGE.get(wkey) || "0");
   const max = await getKVNum(env,"max_forges_per_wallet_per_day",7);
   if(cur >= max) return bad("daily limit reached", 429);
 
-  // Preis
   const presaleDaysLeft = await getKVNum(env,"presale_days_left",0);
   let price = 0;
   if (presaleDaysLeft>0) {
@@ -180,7 +349,7 @@ async function routeCommit(req:Request, env:Env, sess:any){
                               : Number(await getKVNum(env,"presale_price_usdc",5));
   } else {
     price = currency==="USDC" ? Number(await getKVNum(env,"public_price_usdc",7))
-                              : Number(await getKVNum(env,"public_price_usdc",7)); // INPI public: Frontend calc via oracle
+                              : Number(await getKVNum(env,"public_price_usdc",7));
   }
 
   const serverNonce = randHex(32);
@@ -226,8 +395,6 @@ async function routeTx(req:Request, env:Env, sess:any){
   const recipient = env.TREASURY_WALLET;
   const label = encodeURIComponent("Inpinity Forge");
   const message = encodeURIComponent(`Forge ${c.classId} with ${c.currency}`);
-
-  // Solana Pay URL
   const url = `solana:${recipient}?amount=${amount}&spl-token=${mint}&reference=${c.reference}&label=${label}&message=${message}`;
   return ok({ solanaPayUrl: url, reference: c.reference, amount, currency: c.currency });
 }
@@ -240,13 +407,11 @@ async function routeReveal(req:Request, env:Env, sess:any){
   const c: Commit = JSON.parse(raw);
   if(c.pubkey !== sess.pubkey) return bad("not your commit", 403);
 
-  // ====== P2: echte Zahlung prüfen ======
   const mint = c.currency==="INPI" ? env.INPI_MINT : env.USDC_MINT;
   const payerSig = await verifyPaymentByReference(env, c.reference, mint, c.price);
   if (!payerSig) return bad("payment not found or invalid", 402);
 
-  // ====== RNG + Caps + Stats ======
-  const pi = { row: 7, rarity_score: 9, digit_pi: 3, digit_phi: 1, is_axis: true }; // TODO: echte Werte via Gate
+  const pi = { row: 7, rarity_score: 9, digit_pi: 3, digit_phi: 1, is_axis: true }; // TODO: aus Gate übernehmen
 
   const seedInput = `${sess.pubkey}|${c.serverNonce}|${c.classId}|${now()}`;
   const ue_seed = await sha256hex(seedInput);
@@ -262,7 +427,6 @@ async function routeReveal(req:Request, env:Env, sess:any){
   const r = await randBpsFromSeed(ue_seed);
   let outcome = pickRarityBps(r, wCommon, wRare, wEpic, wLegend);
 
-  // global caps
   if (outcome==="Legendary"){
     const dkey = `legend:day:${dayKey()}`;
     const wkey = `legend:week:${weekKey()}`;
@@ -284,13 +448,11 @@ async function routeReveal(req:Request, env:Env, sess:any){
 
   const stats = baseStats(outcome, ue_seed, pi);
 
-  // Wallet day count ++
   const day = dayKey();
   const wcountKey = `count:${sess.pubkey}:${day}`;
   const cur = Number(await env.KV_FORGE.get(wcountKey) || "0");
   await env.KV_FORGE.put(wcountKey, String(cur+1), { expirationTtl: 172800 });
 
-  // Mint-Ticket speichern
   const mintTicketId = randHex(16);
   const ticket = {
     id: mintTicketId,
@@ -330,8 +492,6 @@ async function routeReveal(req:Request, env:Env, sess:any){
     }
   };
   await env.KV_FORGE.put(`ticket:${mintTicketId}`, JSON.stringify(ticket), { expirationTtl: 1209600 });
-
-  // Index aktualisieren (owner + ready)
   await pushIndex(env, `idx:tickets:${sess.pubkey}`, mintTicketId);
   await pushIndex(env, `idx:tickets:ready`, mintTicketId);
 
@@ -374,11 +534,7 @@ async function routeAdminMarkMinted(req:Request, env:Env){
   t.status = "minted";
   t.onchain = { mint: mintPubkey, metadataUri };
   await env.KV_FORGE.put(`ticket:${id}`, JSON.stringify(t), { expirationTtl: 1209600 });
-
-  // aus ready-index entfernen
   await removeFromIndex(env, "idx:tickets:ready", id);
-
-  // optional: in owner-index bleibt Ticket enthalten (Historie)
   return ok({ ok: true });
 }
 
@@ -407,7 +563,7 @@ function baseStats(rarity:string, seed:string, pi:any){
   if (pi.row<=8){ (Math.random()>0.5 ? attack : defense) = Math.floor((Math.random()>0.5?attack:defense)*1.1); }
   if (pi.is_axis){ if (Math.random()>0.5) attack+=3; else defense+=3; }
   if (pi.digit_pi===pi.digit_phi){ crit+=2; speed+=2; }
-  const elements = ["fire","lightning"]; // P1 fix; später dynamisch
+  const elements = ["fire","lightning"];
   return { attack, defense, speed, crit, res_fire: pick(seed,24,20), res_ice: pick(seed,28,20), elements };
 }
 async function randomReferencePubkey(){
