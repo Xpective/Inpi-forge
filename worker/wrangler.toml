@@ -21,3 +21,6 @@ CREATOR_PUBKEY = "GEFoNLncuhh4nH99GKvVEUxe59SGe74dbLG7UUtfHrCp"
 
 # Empfänger (Owner der Ziel-Tokenkonten)
 TREASURY_WALLET = "DZ9BG5TAwo6hxb4HwbbYT2xsCZXdq3CpJ3F8B3qHiWnd"  # <-- dein Wallet (Owner)
+
+
+ADMIN_TOKEN = "XpectiveInpinity"        # <-- Starker geheimer Token für Admin-Endpoints
