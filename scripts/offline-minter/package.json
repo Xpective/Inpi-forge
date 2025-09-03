@@ -2,8 +2,13 @@
   "name": "offline-minter",
   "type": "module",
   "private": true,
+  "scripts": {
+    "mint": "node minter.mjs"
+  },
   "dependencies": {
+    "@metaplex-foundation/js": "^0.19.5",
     "@solana/web3.js": "^1.95.3",
+    "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2"
   }
 }
