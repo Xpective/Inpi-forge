@@ -5,7 +5,7 @@ compatibility_date = "2025-08-20"
 # KV Bindings
 [[kv_namespaces]]
 binding = "KV_FORGE"
-id = "KVID_PROD"    # nach create einsetzen
+id = "a7df29a36d4742b6846d2311583ecc49"    # nach create einsetzen
 preview_id = "KVID_DEV"
 
 # Optional: R2 (später)
