@@ -21,6 +21,7 @@ CREATOR_PUBKEY = "GEFoNLncuhh4nH99GKvVEUxe59SGe74dbLG7UUtfHrCp"
 
 # Empfänger (Owner der Ziel-Tokenkonten)
 TREASURY_WALLET = "DZ9BG5TAwo6hxb4HwbbYT2xsCZXdq3CpJ3F8B3qHiWnd"  # <-- dein Wallet (Owner)
-
+# 👉 NEU: Offizieller Collection-Mint der Pi Pyramide
+PI_COLLECTION_MINT = "6xvwKXMUGfkqhs1f3ZN3KkrdvLh2vF3tX1pqLo9aYPrQ"
 
 ADMIN_TOKEN = "XpectiveInpinity"        # <-- Starker geheimer Token für Admin-Endpoints
