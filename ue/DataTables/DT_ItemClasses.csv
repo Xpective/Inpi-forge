@@ -1,0 +1,4 @@
+ClassId,MeshPath,IsSkeletal,Sockets
+sword.v2,/Game/Items/Meshes/SwordV2.SwordV2,False,Tip;Hilt
+amulet.v1,/Game/Items/Meshes/AmuletV1.AmuletV1,False,Core
+relic.v1,/Game/Items/Meshes/RelicV1.RelicV1,False,Center
